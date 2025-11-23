@@ -50,6 +50,28 @@
         </form>
         
         <div id="message" class="message"></div>
+        
+        <div class="settings-section">
+            <button id="settingsBtn" class="settings-btn">⚙️ Settings</button>
+            <div id="settingsPanel" class="settings-panel" style="display: none;">
+                <h3>GitHub Configuration</h3>
+                <p class="settings-note">Enter your GitHub details to save data directly to your repository</p>
+                <div class="input-group">
+                    <label for="githubUsername">GitHub Username:</label>
+                    <input type="text" id="githubUsername" placeholder="your-username">
+                </div>
+                <div class="input-group">
+                    <label for="githubRepo">Repository Name:</label>
+                    <input type="text" id="githubRepo" placeholder="betproject">
+                </div>
+                <div class="input-group">
+                    <label for="githubToken">Personal Access Token:</label>
+                    <input type="password" id="githubToken" placeholder="ghp_xxxxxxxxxxxx">
+                    <small class="help-text">Create one at: <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a> (needs 'repo' scope)</small>
+                </div>
+                <button id="saveSettingsBtn" class="save-settings-btn">Save Settings</button>
+            </div>
+        </div>
     </div>
     
     <script src="script.js"></script>
