@@ -134,18 +134,22 @@ async function saveEntry() {
     if (githubConfig.username && githubConfig.repo && githubConfig.token) {
         // Save to GitHub
         try {
-            showMessage('Saving to GitHub...', 'success');
+            showMessage(`Saving entry for ${date} to GitHub...`, 'success');
+            console.log('Saving to GitHub with date:', date);
+            console.log('CSV row:', csvRow);
             await saveToGitHub(csvRow, date, githubConfig);
-            showMessage('Entry saved to GitHub successfully!', 'success');
+            showMessage(`Entry for ${date} saved to GitHub successfully!`, 'success');
             // Refresh history after saving
             setTimeout(() => {
                 loadHistoryAndStats();
             }, 500);
         } catch (error) {
             console.error('Error saving to GitHub:', error);
+            console.error('Error details:', error.message, error.stack);
             showMessage('Error saving to GitHub: ' + error.message, 'error');
             // Fallback to localStorage
             saveToLocalStorage(csvRow, date, currentUser);
+            showMessage('Entry saved locally only. Check console for GitHub error details.', 'error');
             // Refresh history after saving
             setTimeout(() => {
                 loadHistoryAndStats();
@@ -260,35 +264,49 @@ async function saveToGitHub(csvRow, date, config) {
     
     const dataLines = csvContent.trim().split('\n').slice(1).filter(line => line.trim() !== '');
     
-    // Check if entry for today already exists for this user
+    console.log('Current data lines in CSV:', dataLines.length);
+    console.log('Looking for entry with date:', date, 'and user:', currentUser);
+    
+    // Check if entry for the selected date already exists for this user
     const existingIndex = dataLines.findIndex(line => {
         const parts = line.split(',');
         // Handle both old format (5 columns) and new format (6 columns)
         if (parts.length === 5) {
             // Old format without username - check by date only
-            return parts[0] === date;
+            const match = parts[0] === date;
+            if (match) console.log('Found old format entry for date:', date);
+            return match;
         } else if (parts.length === 6) {
             // New format with username
-            return parts[0] === date && parts[1] === currentUser;
+            const match = parts[0] === date && parts[1] === currentUser;
+            if (match) console.log('Found existing entry for date:', date, 'user:', currentUser);
+            return match;
         }
         return false;
     });
-    
-    if (existingIndex !== -1) {
-        // Update existing entry
-        dataLines[existingIndex] = csvRow.trim();
-        csvContent = header + '\n' + dataLines.join('\n') + '\n';
-    } else {
-        // Add new row
-        csvContent += csvRow;
-    }
     
     // Validate the CSV row has correct number of columns
     const rowParts = csvRow.trim().split(',');
     if (rowParts.length !== 6) {
         console.error('CSV row has incorrect number of columns:', rowParts.length, 'Expected 6');
+        console.error('CSV row:', csvRow);
         throw new Error('Failed to create valid CSV row. Please try again.');
     }
+    
+    if (existingIndex !== -1) {
+        // Update existing entry
+        console.log(`Updating existing entry at index ${existingIndex} for date ${date}`);
+        dataLines[existingIndex] = csvRow.trim();
+        csvContent = header + '\n' + dataLines.join('\n') + '\n';
+    } else {
+        // Add new row - ensure proper formatting
+        console.log(`Adding new entry for date ${date}`);
+        // Remove trailing newline from csvContent if it exists, then add the new row
+        const trimmedContent = csvContent.trim();
+        csvContent = trimmedContent + '\n' + csvRow.trim() + '\n';
+    }
+    
+    console.log('Final CSV will have', csvContent.split('\n').length - 1, 'data rows');
     
     // Encode content to base64
     const encodedContent = btoa(unescape(encodeURIComponent(csvContent)));
