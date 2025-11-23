@@ -125,19 +125,33 @@ async function saveEntry() {
         return;
     }
     
-    // Create CSV row with username (ensure username is included)
+    // Create entry object
+    const entry = {
+        date: date,
+        sleep: parseInt(sleep) || 0,
+        food: parseInt(food) || 0,
+        exercise: parseInt(exercise) || 0,
+        feeling: parseInt(feeling) || 0
+    };
+    
+    // Create CSV row with username (for backup/compatibility)
     const csvRow = `${date},${currentUser.trim()},${sleep},${food},${exercise},${feeling}\n`;
     
     // Get GitHub settings
     const githubConfig = getGitHubConfig();
     
     if (githubConfig.username && githubConfig.repo && githubConfig.token) {
-        // Save to GitHub
+        // Save to GitHub (both JSON database and CSV backup)
         try {
             showMessage(`Saving entry for ${date} to GitHub...`, 'success');
             console.log('Saving to GitHub with date:', date);
-            console.log('CSV row:', csvRow);
+            
+            // Save to user's JSON database file (primary storage)
+            await saveToUserJSON(entry, currentUser, githubConfig);
+            
+            // Also save to CSV for backup/compatibility
             await saveToGitHub(csvRow, date, githubConfig);
+            
             showMessage(`Entry for ${date} saved to GitHub successfully!`, 'success');
             // Refresh history after saving
             setTimeout(() => {
@@ -398,9 +412,17 @@ async function loadHistoryAndStats() {
     }
     
     try {
-        // Load CSV data
-        const csvData = await getCSVFromGitHub();
-        const userEntries = parseUserEntries(csvData, currentUser);
+        // Try to load from user's JSON database file first (primary source)
+        let userEntries = await getUserEntriesFromJSON(currentUser);
+        
+        // If no entries from JSON, try CSV as fallback
+        if (userEntries.length === 0) {
+            console.log('No entries in JSON database, trying CSV fallback...');
+            const csvData = await getCSVFromGitHub();
+            userEntries = parseUserEntries(csvData, currentUser);
+        }
+        
+        console.log('Loaded', userEntries.length, 'entries for user:', currentUser);
         
         // Display user entries count
         document.getElementById('userEntries').textContent = userEntries.length;
@@ -715,5 +737,127 @@ async function getUsersFromGitHub() {
     }
     
     return users;
+}
+
+// Save entry to user's JSON database file (proper database storage)
+async function saveToUserJSON(entry, username, config) {
+    const filename = `user_data_${username}.json`;
+    const apiUrl = `https://api.github.com/repos/${config.username}/${config.repo}/contents/${filename}`;
+    
+    // Get existing entries
+    let existingEntries = [];
+    let sha = null;
+    
+    try {
+        const getResponse = await fetch(apiUrl, {
+            headers: {
+                'Authorization': `token ${config.token}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+        
+        if (getResponse.ok) {
+            const fileData = await getResponse.json();
+            const content = atob(fileData.content.replace(/\n/g, ''));
+            existingEntries = JSON.parse(content);
+            sha = fileData.sha;
+            console.log('Loaded existing entries from JSON database:', existingEntries.length);
+        }
+    } catch (error) {
+        console.log('User JSON database file does not exist yet, will create new one');
+    }
+    
+    // Check if entry for this date already exists
+    const existingIndex = existingEntries.findIndex(e => e.date === entry.date);
+    
+    if (existingIndex !== -1) {
+        // Update existing entry
+        console.log('Updating existing entry for date:', entry.date);
+        existingEntries[existingIndex] = entry;
+    } else {
+        // Add new entry
+        console.log('Adding new entry for date:', entry.date);
+        existingEntries.push(entry);
+    }
+    
+    // Sort by date (newest first)
+    existingEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    // Save to GitHub
+    const jsonContent = JSON.stringify(existingEntries, null, 2);
+    const encodedContent = btoa(unescape(encodeURIComponent(jsonContent)));
+    
+    const body = {
+        message: `Update entry for ${entry.date} - ${username}`,
+        content: encodedContent,
+        branch: 'main'
+    };
+    
+    if (sha) {
+        body.sha = sha;
+    }
+    
+    const response = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `token ${config.token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+    
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to save to user JSON database');
+    }
+    
+    console.log('Successfully saved to user JSON database');
+    return await response.json();
+}
+
+// Get user entries from JSON database (primary data source)
+async function getUserEntriesFromJSON(username) {
+    const githubConfig = getGitHubConfig();
+    
+    if (!githubConfig.username || !githubConfig.repo) {
+        return [];
+    }
+    
+    const filename = `user_data_${username}.json`;
+    const apiUrl = `https://api.github.com/repos/${githubConfig.username}/${githubConfig.repo}/contents/${filename}`;
+    
+    try {
+        let headers = {
+            'Accept': 'application/vnd.github.v3+json'
+        };
+        
+        if (githubConfig.token) {
+            headers['Authorization'] = `token ${githubConfig.token}`;
+        }
+        
+        const response = await fetch(apiUrl, { headers });
+        
+        if (response.ok) {
+            const fileData = await response.json();
+            const content = atob(fileData.content.replace(/\n/g, ''));
+            const entries = JSON.parse(content);
+            
+            // Ensure entries are sorted by date (newest first)
+            entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            console.log('Loaded', entries.length, 'entries from JSON database for', username);
+            return entries;
+        } else if (response.status === 404) {
+            console.log('User JSON database file not found for', username, '- will try CSV fallback');
+            return [];
+        } else {
+            console.warn('Error fetching user JSON:', response.status);
+            return [];
+        }
+    } catch (error) {
+        console.error('Error fetching user entries from JSON:', error);
+        return [];
+    }
 }
 
