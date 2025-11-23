@@ -51,6 +51,15 @@ document.addEventListener('DOMContentLoaded', function() {
     saveSettingsBtn.addEventListener('click', function() {
         saveSettings();
     });
+    
+    // Load and display history and stats
+    loadHistoryAndStats();
+    
+    // Refresh history button
+    const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
+    refreshHistoryBtn.addEventListener('click', function() {
+        loadHistoryAndStats();
+    });
 });
 
 async function saveEntry() {
@@ -90,16 +99,28 @@ async function saveEntry() {
             showMessage('Saving to GitHub...', 'success');
             await saveToGitHub(csvRow, date, githubConfig);
             showMessage('Entry saved to GitHub successfully!', 'success');
+            // Refresh history after saving
+            setTimeout(() => {
+                loadHistoryAndStats();
+            }, 500);
         } catch (error) {
             console.error('Error saving to GitHub:', error);
             showMessage('Error saving to GitHub: ' + error.message, 'error');
             // Fallback to localStorage
             saveToLocalStorage(csvRow, date, currentUser);
+            // Refresh history after saving
+            setTimeout(() => {
+                loadHistoryAndStats();
+            }, 500);
         }
     } else {
         // Fallback to localStorage if GitHub not configured
         saveToLocalStorage(csvRow, date, currentUser);
         showMessage('Entry saved locally. Configure GitHub settings to save to repository.', 'success');
+        // Refresh history after saving
+        setTimeout(() => {
+            loadHistoryAndStats();
+        }, 500);
     }
     
     // Reset sliders to default (5)
@@ -305,5 +326,206 @@ function showMessage(text, type) {
     setTimeout(() => {
         messageDiv.className = 'message';
     }, 3000);
+}
+
+// Load history and stats
+async function loadHistoryAndStats() {
+    const currentUser = sessionStorage.getItem('currentUser');
+    if (!currentUser) {
+        return;
+    }
+    
+    try {
+        // Load CSV data
+        const csvData = await getCSVFromGitHub();
+        const userEntries = parseUserEntries(csvData, currentUser);
+        
+        // Display user entries count
+        document.getElementById('userEntries').textContent = userEntries.length;
+        
+        // Display history
+        displayHistory(userEntries);
+        
+        // Load and display total users
+        const totalUsers = await getTotalUsers();
+        document.getElementById('totalUsers').textContent = totalUsers;
+        
+    } catch (error) {
+        console.error('Error loading history:', error);
+        document.getElementById('historyContainer').innerHTML = 
+            '<p class="loading-text">Error loading history. Please try again.</p>';
+    }
+}
+
+// Get CSV data from GitHub or localStorage
+async function getCSVFromGitHub() {
+    const githubConfig = getGitHubConfig();
+    
+    // Check localStorage first
+    const localData = localStorage.getItem('gradia_data');
+    
+    // If GitHub is configured, try to get from GitHub
+    if (githubConfig.username && githubConfig.repo && githubConfig.token) {
+        try {
+            const apiUrl = `https://api.github.com/repos/${githubConfig.username}/${githubConfig.repo}/contents/gradia_data.csv`;
+            const response = await fetch(apiUrl, {
+                headers: {
+                    'Authorization': `token ${githubConfig.token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            
+            if (response.ok) {
+                const fileData = await response.json();
+                const content = atob(fileData.content.replace(/\n/g, ''));
+                // Update localStorage with latest data
+                localStorage.setItem('gradia_data', content);
+                return content;
+            }
+        } catch (error) {
+            console.error('Error fetching CSV from GitHub:', error);
+        }
+    }
+    
+    // Fallback to localStorage
+    return localData || 'Date,Username,Sleep,Food,Exercise,Feeling\n';
+}
+
+// Parse user entries from CSV
+function parseUserEntries(csvContent, username) {
+    const lines = csvContent.trim().split('\n');
+    if (lines.length < 2) {
+        return [];
+    }
+    
+    const header = lines[0].split(',');
+    const entries = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        const parts = line.split(',');
+        
+        // Handle both old format (5 columns) and new format (6 columns)
+        let date, entryUsername, sleep, food, exercise, feeling;
+        
+        if (parts.length === 5) {
+            // Old format: Date,Sleep,Food,Exercise,Feeling
+            date = parts[0];
+            entryUsername = 'unknown';
+            sleep = parts[1];
+            food = parts[2];
+            exercise = parts[3];
+            feeling = parts[4];
+        } else if (parts.length === 6) {
+            // New format: Date,Username,Sleep,Food,Exercise,Feeling
+            date = parts[0];
+            entryUsername = parts[1];
+            sleep = parts[2];
+            food = parts[3];
+            exercise = parts[4];
+            feeling = parts[5];
+        } else {
+            continue; // Skip invalid lines
+        }
+        
+        // Only include entries for the current user
+        if (entryUsername === username) {
+            entries.push({
+                date,
+                sleep: parseInt(sleep) || 0,
+                food: parseInt(food) || 0,
+                exercise: parseInt(exercise) || 0,
+                feeling: parseInt(feeling) || 0
+            });
+        }
+    }
+    
+    // Sort by date (newest first)
+    entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    return entries;
+}
+
+// Display history entries
+function displayHistory(entries) {
+    const container = document.getElementById('historyContainer');
+    
+    if (entries.length === 0) {
+        container.innerHTML = '<p class="no-entries">No entries yet. Start tracking your daily routine!</p>';
+        return;
+    }
+    
+    let html = '';
+    entries.forEach(entry => {
+        const date = new Date(entry.date).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric' 
+        });
+        
+        html += `
+            <div class="history-entry">
+                <div class="history-date">${date}</div>
+                <div class="history-metrics">
+                    <div class="history-metric">
+                        <span class="history-metric-label">Sleep</span>
+                        <span class="history-metric-value">${entry.sleep}</span>
+                    </div>
+                    <div class="history-metric">
+                        <span class="history-metric-label">Food</span>
+                        <span class="history-metric-value">${entry.food}</span>
+                    </div>
+                    <div class="history-metric">
+                        <span class="history-metric-label">Exercise</span>
+                        <span class="history-metric-value">${entry.exercise}</span>
+                    </div>
+                    <div class="history-metric">
+                        <span class="history-metric-label">Feeling</span>
+                        <span class="history-metric-value">${entry.feeling}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// Get total number of users
+async function getTotalUsers() {
+    const githubConfig = getGitHubConfig();
+    
+    // Check localStorage first
+    const localUsersJson = localStorage.getItem('gradia_users');
+    let users = localUsersJson ? JSON.parse(localUsersJson) : {};
+    
+    // If GitHub is configured, try to get from GitHub
+    if (githubConfig.username && githubConfig.repo && githubConfig.token) {
+        try {
+            const apiUrl = `https://api.github.com/repos/${githubConfig.username}/${githubConfig.repo}/contents/gradia_users.json`;
+            const response = await fetch(apiUrl, {
+                headers: {
+                    'Authorization': `token ${githubConfig.token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            
+            if (response.ok) {
+                const fileData = await response.json();
+                const content = atob(fileData.content.replace(/\n/g, ''));
+                const githubUsers = JSON.parse(content);
+                // Merge users
+                users = { ...users, ...githubUsers };
+                // Update localStorage
+                localStorage.setItem('gradia_users', JSON.stringify(users));
+            }
+        } catch (error) {
+            console.error('Error fetching users from GitHub:', error);
+        }
+    }
+    
+    return Object.keys(users).length;
 }
 

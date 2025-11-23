@@ -55,6 +55,27 @@
         
         <div id="message" class="message"></div>
         
+        <!-- Stats Section -->
+        <div class="stats-section">
+            <div class="stat-card">
+                <div class="stat-label">Total Users</div>
+                <div class="stat-value" id="totalUsers">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Your Entries</div>
+                <div class="stat-value" id="userEntries">-</div>
+            </div>
+        </div>
+        
+        <!-- History Section -->
+        <div class="history-section">
+            <h3>Your History</h3>
+            <button id="refreshHistoryBtn" class="refresh-btn">🔄 Refresh</button>
+            <div id="historyContainer" class="history-container">
+                <p class="loading-text">Loading your entries...</p>
+            </div>
+        </div>
+        
         <div class="settings-section">
             <button id="settingsBtn" class="settings-btn">⚙️ Settings</button>
             <div id="settingsPanel" class="settings-panel" style="display: none;">
