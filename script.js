@@ -282,10 +282,12 @@ async function saveToGitHub(csvRow, date, config) {
 }
 
 function getGitHubConfig() {
+    // Try to get from localStorage, but use hardcoded defaults if not available
+    // This ensures it works even after cache clear
     return {
-        username: localStorage.getItem('github_username') || '',
-        repo: localStorage.getItem('github_repo') || '',
-        token: localStorage.getItem('github_token') || ''
+        username: localStorage.getItem('github_username') || 'neroquarthaz',
+        repo: localStorage.getItem('github_repo') || 'gradia',
+        token: localStorage.getItem('github_token') || '' // Token still needs to be set
     };
 }
 

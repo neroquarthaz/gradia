@@ -112,44 +112,117 @@ async function hashPassword(password) {
         .join('');
 }
 
-// Get users from GitHub
+// Get users from GitHub (prioritize GitHub, fallback to localStorage)
 async function getUsersFromGitHub() {
     const githubConfig = getGitHubConfig();
+    let users = {};
     
-    // Always check localStorage first for immediate access
-    const localUsersJson = localStorage.getItem('gradia_users');
-    let users = localUsersJson ? JSON.parse(localUsersJson) : {};
-    
-    // If GitHub is configured, try to sync with GitHub
-    if (githubConfig.username && githubConfig.repo && githubConfig.token) {
+    // Try to get from GitHub first (even without token for public repos)
+    if (githubConfig.username && githubConfig.repo) {
         try {
-            const apiUrl = `https://api.github.com/repos/${githubConfig.username}/${githubConfig.repo}/contents/gradia_users.json`;
-            const response = await fetch(apiUrl, {
-                headers: {
-                    'Authorization': `token ${githubConfig.token}`,
-                    'Accept': 'application/vnd.github.v3+json'
-                }
-            });
+            // Try with token first (for private repos or write access)
+            let apiUrl = `https://api.github.com/repos/${githubConfig.username}/${githubConfig.repo}/contents/gradia_users.json`;
+            let headers = {
+                'Accept': 'application/vnd.github.v3+json'
+            };
+            
+            if (githubConfig.token) {
+                headers['Authorization'] = `token ${githubConfig.token}`;
+            }
+            
+            let response = await fetch(apiUrl, { headers });
             
             if (response.ok) {
                 const fileData = await response.json();
                 const content = atob(fileData.content.replace(/\n/g, ''));
-                const githubUsers = JSON.parse(content);
-                // Merge: GitHub takes precedence, but keep local if GitHub doesn't have it
-                users = { ...users, ...githubUsers };
-                // Update localStorage with merged data
+                users = JSON.parse(content);
+                // Update localStorage with GitHub data
                 localStorage.setItem('gradia_users', JSON.stringify(users));
+                console.log('Loaded users from GitHub:', Object.keys(users).length);
+            } else if (response.status === 404) {
+                // File doesn't exist yet, try CSV
+                console.log('JSON file not found, trying CSV...');
+                users = await getUsersFromCSV();
+            } else {
+                // Try CSV as fallback
+                console.log('Error fetching JSON, trying CSV...');
+                users = await getUsersFromCSV();
             }
         } catch (error) {
-            console.error('Error fetching users from GitHub:', error);
-            // Continue with localStorage data
+            console.error('Error fetching users from GitHub JSON:', error);
+            // Try CSV as fallback
+            users = await getUsersFromCSV();
         }
+    }
+    
+    // If no users from GitHub, try CSV
+    if (Object.keys(users).length === 0) {
+        users = await getUsersFromCSV();
+    }
+    
+    // Fallback to localStorage if nothing else works
+    if (Object.keys(users).length === 0) {
+        const localUsersJson = localStorage.getItem('gradia_users');
+        users = localUsersJson ? JSON.parse(localUsersJson) : {};
     }
     
     return users;
 }
 
-// Save users to GitHub
+// Get users from CSV file
+async function getUsersFromCSV() {
+    const githubConfig = getGitHubConfig();
+    let users = {};
+    
+    if (!githubConfig.username || !githubConfig.repo) {
+        return users;
+    }
+    
+    try {
+        let apiUrl = `https://api.github.com/repos/${githubConfig.username}/${githubConfig.repo}/contents/users.csv`;
+        let headers = {
+            'Accept': 'application/vnd.github.v3+json'
+        };
+        
+        if (githubConfig.token) {
+            headers['Authorization'] = `token ${githubConfig.token}`;
+        }
+        
+        const response = await fetch(apiUrl, { headers });
+        
+        if (response.ok) {
+            const fileData = await response.json();
+            const content = atob(fileData.content.replace(/\n/g, ''));
+            const lines = content.trim().split('\n');
+            
+            // Skip header line
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                
+                const parts = line.split(',');
+                if (parts.length >= 2) {
+                    const username = parts[0].trim();
+                    const passwordHash = parts[1].trim();
+                    const createdAt = parts[2] ? parts[2].trim() : new Date().toISOString();
+                    
+                    users[username] = {
+                        password: passwordHash,
+                        createdAt: createdAt
+                    };
+                }
+            }
+            
+            console.log('Loaded users from CSV:', Object.keys(users).length);
+        }
+    } catch (error) {
+        console.error('Error fetching users from CSV:', error);
+    }
+    
+    return users;
+}
+
+// Save users to GitHub (both JSON and CSV)
 async function saveUsersToGitHub(users) {
     const githubConfig = getGitHubConfig();
     const usersJson = JSON.stringify(users, null, 2);
@@ -157,63 +230,97 @@ async function saveUsersToGitHub(users) {
     // Also save to localStorage as backup
     localStorage.setItem('gradia_users', usersJson);
     
-    if (!githubConfig.username || !githubConfig.repo || !githubConfig.token) {
+    if (!githubConfig.username || !githubConfig.repo) {
         return true; // Just saved to localStorage
     }
     
-    try {
-        const apiUrl = `https://api.github.com/repos/${githubConfig.username}/${githubConfig.repo}/contents/gradia_users.json`;
-        
-        // Try to get existing file
-        let sha = null;
+    // Save to JSON file
+    if (githubConfig.token) {
         try {
-            const getResponse = await fetch(apiUrl, {
-                headers: {
-                    'Authorization': `token ${githubConfig.token}`,
-                    'Accept': 'application/vnd.github.v3+json'
-                }
-            });
-            
-            if (getResponse.ok) {
-                const fileData = await getResponse.json();
-                sha = fileData.sha;
-            }
+            await saveUsersToGitHubFile('gradia_users.json', usersJson, githubConfig);
         } catch (error) {
-            // File doesn't exist yet
+            console.error('Error saving users JSON to GitHub:', error);
         }
-        
-        const encodedContent = btoa(unescape(encodeURIComponent(usersJson)));
-        const body = {
-            message: 'Update users list',
-            content: encodedContent,
-            branch: 'main'
-        };
-        
-        if (sha) {
-            body.sha = sha;
+    }
+    
+    // Save to CSV file
+    try {
+        const csvContent = convertUsersToCSV(users);
+        if (githubConfig.token) {
+            await saveUsersToGitHubFile('users.csv', csvContent, githubConfig);
         }
-        
-        const response = await fetch(apiUrl, {
-            method: 'PUT',
+    } catch (error) {
+        console.error('Error saving users CSV to GitHub:', error);
+    }
+    
+    return true;
+}
+
+// Convert users object to CSV format
+function convertUsersToCSV(users) {
+    let csv = 'Username,PasswordHash,CreatedAt\n';
+    
+    for (const username in users) {
+        const user = users[username];
+        csv += `${username},${user.password},${user.createdAt || new Date().toISOString()}\n`;
+    }
+    
+    return csv;
+}
+
+// Save users file to GitHub
+async function saveUsersToGitHubFile(filename, content, config) {
+    if (!config.token) {
+        return; // Need token to write
+    }
+    
+    const apiUrl = `https://api.github.com/repos/${config.username}/${config.repo}/contents/${filename}`;
+    
+    // Try to get existing file
+    let sha = null;
+    try {
+        const getResponse = await fetch(apiUrl, {
             headers: {
-                'Authorization': `token ${githubConfig.token}`,
-                'Accept': 'application/vnd.github.v3+json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(body)
+                'Authorization': `token ${config.token}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
         });
         
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to save users');
+        if (getResponse.ok) {
+            const fileData = await getResponse.json();
+            sha = fileData.sha;
         }
-        
-        return true;
     } catch (error) {
-        console.error('Error saving users to GitHub:', error);
-        // At least saved to localStorage
-        return true;
+        // File doesn't exist yet
     }
+    
+    const encodedContent = btoa(unescape(encodeURIComponent(content)));
+    const body = {
+        message: `Update users list - ${new Date().toISOString()}`,
+        content: encodedContent,
+        branch: 'main'
+    };
+    
+    if (sha) {
+        body.sha = sha;
+    }
+    
+    const response = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `token ${config.token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+    
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `Failed to save ${filename}`);
+    }
+    
+    return await response.json();
 }
 
 // Authenticate user
@@ -266,11 +373,19 @@ async function createUser(username, password) {
 }
 
 // Get GitHub config (shared function)
+// Try to get from localStorage, but also try hardcoded defaults
 function getGitHubConfig() {
+    // First try localStorage (for admin token)
+    const storedUsername = localStorage.getItem('github_username');
+    const storedRepo = localStorage.getItem('github_repo');
+    const storedToken = localStorage.getItem('github_token');
+    
+    // Use hardcoded defaults if not in localStorage (so it works after cache clear)
+    // These should match your actual GitHub repo
     return {
-        username: localStorage.getItem('github_username') || '',
-        repo: localStorage.getItem('github_repo') || '',
-        token: localStorage.getItem('github_token') || ''
+        username: storedUsername || 'neroquarthaz',
+        repo: storedRepo || 'gradia',
+        token: storedToken || '' // Token still needs to be set by admin
     };
 }
 
