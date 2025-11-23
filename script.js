@@ -20,6 +20,18 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = 'index.html';
     });
     
+    // Set default date to today
+    const dateInput = document.getElementById('entryDate');
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.value = today;
+    dateInput.max = today; // Don't allow future dates
+    
+    // Today button
+    const todayBtn = document.getElementById('todayBtn');
+    todayBtn.addEventListener('click', function() {
+        dateInput.value = today;
+    });
+    
     const sliders = document.querySelectorAll('.slider');
     const valueDisplays = document.querySelectorAll('.slider-value');
     
@@ -94,7 +106,15 @@ async function saveEntry() {
     const food = document.getElementById('food').value;
     const exercise = document.getElementById('exercise').value;
     const feeling = document.getElementById('feeling').value;
-    const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    // Get selected date from date picker
+    const dateInput = document.getElementById('entryDate');
+    const date = dateInput.value || new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    if (!date) {
+        showMessage('Please select a date', 'error');
+        return;
+    }
     
     // Validate that we have a username
     if (!currentUser || currentUser.trim() === '') {
@@ -152,6 +172,10 @@ async function saveEntry() {
     document.getElementById('food-value').textContent = 5;
     document.getElementById('exercise-value').textContent = 5;
     document.getElementById('feeling-value').textContent = 5;
+    
+    // Reset date to today
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('entryDate').value = today;
 }
 
 function saveToLocalStorage(csvRow, date, username) {

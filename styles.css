@@ -84,6 +84,64 @@ h1 {
     gap: 30px;
 }
 
+.date-group {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    margin-bottom: 10px;
+}
+
+.date-group label {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #333;
+    white-space: nowrap;
+}
+
+.date-input {
+    flex: 1;
+    padding: 12px;
+    font-size: 1rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    background: white;
+    color: #333;
+    cursor: pointer;
+    transition: border-color 0.3s;
+    font-family: inherit;
+}
+
+.date-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.today-btn {
+    padding: 12px 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: white;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    white-space: nowrap;
+}
+
+.today-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.today-btn:active {
+    transform: translateY(0);
+}
+
 .slider-group {
     display: flex;
     flex-direction: column;
@@ -565,6 +623,19 @@ h1 {
         flex-direction: column;
         align-items: flex-start;
         gap: 10px;
+    }
+    
+    .date-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .date-group label {
+        margin-bottom: 8px;
+    }
+    
+    .today-btn {
+        width: 100%;
     }
 }
 
