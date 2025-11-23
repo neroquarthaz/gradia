@@ -25,25 +25,39 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         const username = document.getElementById('loginUsername').value.trim();
         const password = document.getElementById('loginPassword').value;
+        const submitBtn = loginForm.querySelector('button[type="submit"]');
         
         if (!username || !password) {
             showMessage('Please enter both username and password', 'error');
             return;
         }
         
+        // Disable button and show loading
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Logging in...';
+        
         try {
+            showMessage('Logging in...', 'success');
             const success = await authenticateUser(username, password);
             if (success) {
                 // Store current user
                 sessionStorage.setItem('currentUser', username);
-                // Redirect to main page
-                window.location.href = 'tracker.html';
+                showMessage('Login successful! Redirecting...', 'success');
+                // Small delay to show success message
+                setTimeout(() => {
+                    window.location.href = 'tracker.html';
+                }, 500);
             } else {
                 showMessage('Invalid username or password', 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
             }
         } catch (error) {
             console.error('Login error:', error);
             showMessage('Error during login: ' + error.message, 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
         }
     });
     
@@ -102,35 +116,37 @@ async function hashPassword(password) {
 async function getUsersFromGitHub() {
     const githubConfig = getGitHubConfig();
     
-    if (!githubConfig.username || !githubConfig.repo || !githubConfig.token) {
-        // Fallback to localStorage
-        const usersJson = localStorage.getItem('gradia_users');
-        return usersJson ? JSON.parse(usersJson) : {};
+    // Always check localStorage first for immediate access
+    const localUsersJson = localStorage.getItem('gradia_users');
+    let users = localUsersJson ? JSON.parse(localUsersJson) : {};
+    
+    // If GitHub is configured, try to sync with GitHub
+    if (githubConfig.username && githubConfig.repo && githubConfig.token) {
+        try {
+            const apiUrl = `https://api.github.com/repos/${githubConfig.username}/${githubConfig.repo}/contents/gradia_users.json`;
+            const response = await fetch(apiUrl, {
+                headers: {
+                    'Authorization': `token ${githubConfig.token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            
+            if (response.ok) {
+                const fileData = await response.json();
+                const content = atob(fileData.content.replace(/\n/g, ''));
+                const githubUsers = JSON.parse(content);
+                // Merge: GitHub takes precedence, but keep local if GitHub doesn't have it
+                users = { ...users, ...githubUsers };
+                // Update localStorage with merged data
+                localStorage.setItem('gradia_users', JSON.stringify(users));
+            }
+        } catch (error) {
+            console.error('Error fetching users from GitHub:', error);
+            // Continue with localStorage data
+        }
     }
     
-    try {
-        const apiUrl = `https://api.github.com/repos/${githubConfig.username}/${githubConfig.repo}/contents/gradia_users.json`;
-        const response = await fetch(apiUrl, {
-            headers: {
-                'Authorization': `token ${githubConfig.token}`,
-                'Accept': 'application/vnd.github.v3+json'
-            }
-        });
-        
-        if (response.ok) {
-            const fileData = await response.json();
-            const content = atob(fileData.content.replace(/\n/g, ''));
-            return JSON.parse(content);
-        } else {
-            // File doesn't exist, return empty object
-            return {};
-        }
-    } catch (error) {
-        console.error('Error fetching users:', error);
-        // Fallback to localStorage
-        const usersJson = localStorage.getItem('gradia_users');
-        return usersJson ? JSON.parse(usersJson) : {};
-    }
+    return users;
 }
 
 // Save users to GitHub
@@ -202,14 +218,33 @@ async function saveUsersToGitHub(users) {
 
 // Authenticate user
 async function authenticateUser(username, password) {
-    const users = await getUsersFromGitHub();
-    const hashedPassword = await hashPassword(password);
-    
-    if (users[username] && users[username].password === hashedPassword) {
-        return true;
+    try {
+        const users = await getUsersFromGitHub();
+        const hashedPassword = await hashPassword(password);
+        
+        console.log('Attempting to authenticate:', username);
+        console.log('Users found:', Object.keys(users));
+        
+        if (users[username]) {
+            console.log('User found, comparing passwords...');
+            console.log('Stored hash:', users[username].password);
+            console.log('Input hash:', hashedPassword);
+            
+            if (users[username].password === hashedPassword) {
+                console.log('Password match!');
+                return true;
+            } else {
+                console.log('Password mismatch');
+            }
+        } else {
+            console.log('User not found');
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('Authentication error:', error);
+        throw error;
     }
-    
-    return false;
 }
 
 // Create new user
