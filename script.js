@@ -52,6 +52,24 @@ document.addEventListener('DOMContentLoaded', function() {
         saveSettings();
     });
     
+    // Sync users to CSV button
+    const syncUsersBtn = document.getElementById('syncUsersBtn');
+    if (syncUsersBtn) {
+        syncUsersBtn.addEventListener('click', async function() {
+            syncUsersBtn.disabled = true;
+            syncUsersBtn.textContent = 'Syncing...';
+            try {
+                await syncUsersToCSV();
+                showMessage('Users synced to CSV successfully!', 'success');
+            } catch (error) {
+                showMessage('Error syncing users: ' + error.message, 'error');
+            } finally {
+                syncUsersBtn.disabled = false;
+                syncUsersBtn.textContent = '🔄 Sync Users to CSV';
+            }
+        });
+    }
+    
     // Load and display history and stats
     loadHistoryAndStats();
     
@@ -529,5 +547,131 @@ async function getTotalUsers() {
     }
     
     return Object.keys(users).length;
+}
+
+// Sync users from JSON to CSV (for existing users)
+async function syncUsersToCSV() {
+    const githubConfig = getGitHubConfig();
+    
+    if (!githubConfig.token) {
+        throw new Error('GitHub token not set. Please set it in Settings first.');
+    }
+    
+    // Get users from JSON
+    const users = await getUsersFromGitHub();
+    
+    if (Object.keys(users).length === 0) {
+        throw new Error('No users found to sync');
+    }
+    
+    // Convert to CSV and save
+    const csvContent = convertUsersToCSV(users);
+    await saveUsersToGitHubFile('users.csv', csvContent, githubConfig);
+    
+    return true;
+}
+
+// Helper function to convert users to CSV (shared with auth.js logic)
+function convertUsersToCSV(users) {
+    let csv = 'Username,PasswordHash,CreatedAt\n';
+    
+    for (const username in users) {
+        const user = users[username];
+        csv += `${username},${user.password},${user.createdAt || new Date().toISOString()}\n`;
+    }
+    
+    return csv;
+}
+
+// Helper function to save file to GitHub (shared with auth.js logic)
+async function saveUsersToGitHubFile(filename, content, config) {
+    if (!config.token) {
+        throw new Error('GitHub token not set');
+    }
+    
+    const apiUrl = `https://api.github.com/repos/${config.username}/${config.repo}/contents/${filename}`;
+    
+    // Try to get existing file
+    let sha = null;
+    try {
+        const getResponse = await fetch(apiUrl, {
+            headers: {
+                'Authorization': `token ${config.token}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+        
+        if (getResponse.ok) {
+            const fileData = await getResponse.json();
+            sha = fileData.sha;
+        }
+    } catch (error) {
+        // File doesn't exist yet
+    }
+    
+    const encodedContent = btoa(unescape(encodeURIComponent(content)));
+    const body = {
+        message: `Sync users to CSV - ${new Date().toISOString()}`,
+        content: encodedContent,
+        branch: 'main'
+    };
+    
+    if (sha) {
+        body.sha = sha;
+    }
+    
+    const response = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `token ${config.token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+    
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `Failed to save ${filename}`);
+    }
+    
+    return await response.json();
+}
+
+// Get users from GitHub (shared function)
+async function getUsersFromGitHub() {
+    const githubConfig = getGitHubConfig();
+    let users = {};
+    
+    if (githubConfig.username && githubConfig.repo) {
+        try {
+            let apiUrl = `https://api.github.com/repos/${githubConfig.username}/${githubConfig.repo}/contents/gradia_users.json`;
+            let headers = {
+                'Accept': 'application/vnd.github.v3+json'
+            };
+            
+            if (githubConfig.token) {
+                headers['Authorization'] = `token ${githubConfig.token}`;
+            }
+            
+            let response = await fetch(apiUrl, { headers });
+            
+            if (response.ok) {
+                const fileData = await response.json();
+                const content = atob(fileData.content.replace(/\n/g, ''));
+                users = JSON.parse(content);
+            }
+        } catch (error) {
+            console.error('Error fetching users:', error);
+        }
+    }
+    
+    // Fallback to localStorage
+    if (Object.keys(users).length === 0) {
+        const localUsersJson = localStorage.getItem('gradia_users');
+        users = localUsersJson ? JSON.parse(localUsersJson) : {};
+    }
+    
+    return users;
 }
 

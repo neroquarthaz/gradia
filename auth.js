@@ -243,14 +243,25 @@ async function saveUsersToGitHub(users) {
         }
     }
     
-    // Save to CSV file
+    // Save to CSV file - always try to save
     try {
         const csvContent = convertUsersToCSV(users);
+        console.log('CSV content to save:', csvContent.substring(0, 100) + '...');
+        
         if (githubConfig.token) {
-            await saveUsersToGitHubFile('users.csv', csvContent, githubConfig);
+            try {
+                const result = await saveUsersToGitHubFile('users.csv', csvContent, githubConfig);
+                console.log('Users CSV saved to GitHub successfully');
+            } catch (csvError) {
+                console.error('Failed to save CSV to GitHub:', csvError);
+                // Still return true - JSON was saved
+            }
+        } else {
+            console.warn('GitHub token not set. Users CSV not saved to GitHub. Please set token in Settings.');
         }
     } catch (error) {
-        console.error('Error saving users CSV to GitHub:', error);
+        console.error('Error preparing CSV content:', error);
+        // Don't throw - at least JSON might have been saved
     }
     
     return true;
@@ -271,10 +282,12 @@ function convertUsersToCSV(users) {
 // Save users file to GitHub
 async function saveUsersToGitHubFile(filename, content, config) {
     if (!config.token) {
-        return; // Need token to write
+        console.warn(`Cannot save ${filename}: GitHub token not set`);
+        return null; // Need token to write
     }
     
     const apiUrl = `https://api.github.com/repos/${config.username}/${config.repo}/contents/${filename}`;
+    console.log(`Saving ${filename} to GitHub...`);
     
     // Try to get existing file
     let sha = null;
@@ -289,9 +302,14 @@ async function saveUsersToGitHubFile(filename, content, config) {
         if (getResponse.ok) {
             const fileData = await getResponse.json();
             sha = fileData.sha;
+            console.log(`Found existing ${filename}, will update`);
+        } else if (getResponse.status === 404) {
+            console.log(`${filename} doesn't exist yet, will create new file`);
+        } else {
+            console.warn(`Unexpected response when checking ${filename}:`, getResponse.status);
         }
     } catch (error) {
-        // File doesn't exist yet
+        console.log(`${filename} doesn't exist yet, will create new file`);
     }
     
     const encodedContent = btoa(unescape(encodeURIComponent(content)));
@@ -317,10 +335,14 @@ async function saveUsersToGitHubFile(filename, content, config) {
     
     if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || `Failed to save ${filename}`);
+        const errorMsg = errorData.message || `Failed to save ${filename}`;
+        console.error(`Error saving ${filename}:`, errorMsg, errorData);
+        throw new Error(errorMsg);
     }
     
-    return await response.json();
+    const result = await response.json();
+    console.log(`Successfully saved ${filename} to GitHub`);
+    return result;
 }
 
 // Authenticate user
@@ -368,8 +390,17 @@ async function createUser(username, password) {
         createdAt: new Date().toISOString()
     };
     
-    await saveUsersToGitHub(users);
-    return true;
+    console.log('Saving new user to GitHub:', username);
+    console.log('Total users to save:', Object.keys(users).length);
+    
+    try {
+        await saveUsersToGitHub(users);
+        console.log('User saved successfully to both JSON and CSV');
+        return true;
+    } catch (error) {
+        console.error('Error saving user:', error);
+        throw error;
+    }
 }
 
 // Get GitHub config (shared function)
