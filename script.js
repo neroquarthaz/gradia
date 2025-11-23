@@ -1,5 +1,25 @@
-// Update slider values in real-time
+// Check authentication on page load
 document.addEventListener('DOMContentLoaded', function() {
+    // Check if user is logged in
+    const currentUser = sessionStorage.getItem('currentUser');
+    if (!currentUser) {
+        // Redirect to login page
+        window.location.href = 'login.html';
+        return;
+    }
+    
+    // Display current user
+    const userDisplay = document.getElementById('currentUserDisplay');
+    userDisplay.textContent = `Logged in as: ${currentUser}`;
+    
+    // Logout button
+    const logoutBtn = document.getElementById('logoutBtn');
+    logoutBtn.style.display = 'inline-block';
+    logoutBtn.addEventListener('click', function() {
+        sessionStorage.removeItem('currentUser');
+        window.location.href = 'login.html';
+    });
+    
     const sliders = document.querySelectorAll('.slider');
     const valueDisplays = document.querySelectorAll('.slider-value');
     
@@ -34,14 +54,20 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 async function saveEntry() {
+    const currentUser = sessionStorage.getItem('currentUser');
+    if (!currentUser) {
+        window.location.href = 'login.html';
+        return;
+    }
+    
     const sleep = document.getElementById('sleep').value;
     const food = document.getElementById('food').value;
     const exercise = document.getElementById('exercise').value;
     const feeling = document.getElementById('feeling').value;
     const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
     
-    // Create CSV row
-    const csvRow = `${date},${sleep},${food},${exercise},${feeling}\n`;
+    // Create CSV row with username
+    const csvRow = `${date},${currentUser},${sleep},${food},${exercise},${feeling}\n`;
     
     // Get GitHub settings
     const githubConfig = getGitHubConfig();
@@ -56,11 +82,11 @@ async function saveEntry() {
             console.error('Error saving to GitHub:', error);
             showMessage('Error saving to GitHub: ' + error.message, 'error');
             // Fallback to localStorage
-            saveToLocalStorage(csvRow, date);
+            saveToLocalStorage(csvRow, date, currentUser);
         }
     } else {
         // Fallback to localStorage if GitHub not configured
-        saveToLocalStorage(csvRow, date);
+        saveToLocalStorage(csvRow, date, currentUser);
         showMessage('Entry saved locally. Configure GitHub settings to save to repository.', 'success');
     }
     
@@ -77,20 +103,23 @@ async function saveEntry() {
     document.getElementById('feeling-value').textContent = 5;
 }
 
-function saveToLocalStorage(csvRow, date) {
+function saveToLocalStorage(csvRow, date, username) {
     // Check if CSV file exists in localStorage, if not create header
     let csvContent = localStorage.getItem('gradia_data');
     if (!csvContent) {
-        csvContent = 'Date,Sleep,Food,Exercise,Feeling\n';
+        csvContent = 'Date,Username,Sleep,Food,Exercise,Feeling\n';
     }
     
-    // Parse existing CSV to check for duplicate dates
+    // Parse existing CSV to check for duplicate dates for this user
     const lines = csvContent.trim().split('\n');
     const header = lines[0];
     const dataLines = lines.slice(1);
     
-    // Check if entry for today already exists
-    const existingIndex = dataLines.findIndex(line => line.startsWith(date));
+    // Check if entry for today already exists for this user
+    const existingIndex = dataLines.findIndex(line => {
+        const parts = line.split(',');
+        return parts[0] === date && parts[1] === username;
+    });
     
     if (existingIndex !== -1) {
         // Update existing entry
@@ -130,14 +159,37 @@ async function saveToGitHub(csvRow, date, config) {
         console.log('File does not exist, will create new one');
     }
     
-    // Parse existing CSV or create new
-    let csvContent = existingContent || 'Date,Sleep,Food,Exercise,Feeling\n';
-    const lines = csvContent.trim().split('\n');
-    const header = lines[0];
-    const dataLines = lines.slice(1);
+    // Get current user
+    const currentUser = sessionStorage.getItem('currentUser');
     
-    // Check if entry for today already exists
-    const existingIndex = dataLines.findIndex(line => line.startsWith(date));
+    // Parse existing CSV or create new
+    let csvContent = existingContent || 'Date,Username,Sleep,Food,Exercise,Feeling\n';
+    const lines = csvContent.trim().split('\n');
+    let header = lines[0];
+    
+    // Update header if it's the old format
+    if (!header.includes('Username')) {
+        header = 'Date,Username,Sleep,Food,Exercise,Feeling';
+        // Migrate old data if needed
+        const oldDataLines = lines.slice(1);
+        const newDataLines = oldDataLines.map(line => {
+            const parts = line.split(',');
+            if (parts.length === 5) {
+                // Old format: Date,Sleep,Food,Exercise,Feeling
+                return `${parts[0]},unknown,${parts[1]},${parts[2]},${parts[3]},${parts[4]}`;
+            }
+            return line;
+        });
+        csvContent = header + '\n' + newDataLines.join('\n') + '\n';
+    }
+    
+    const dataLines = csvContent.trim().split('\n').slice(1);
+    
+    // Check if entry for today already exists for this user
+    const existingIndex = dataLines.findIndex(line => {
+        const parts = line.split(',');
+        return parts[0] === date && parts[1] === currentUser;
+    });
     
     if (existingIndex !== -1) {
         // Update existing entry
