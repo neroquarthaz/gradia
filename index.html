@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gradia - Daily Routine Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Gradia</h1>
+            <p class="subtitle">Daily Routine Tracker</p>
+        </header>
+        
+        <form id="trackerForm">
+            <div class="slider-group">
+                <label for="sleep">Sleep Quality</label>
+                <div class="slider-container">
+                    <input type="range" id="sleep" name="sleep" min="0" max="10" value="5" class="slider">
+                    <span class="slider-value" id="sleep-value">5</span>
+                </div>
+            </div>
+            
+            <div class="slider-group">
+                <label for="food">Food Quality</label>
+                <div class="slider-container">
+                    <input type="range" id="food" name="food" min="0" max="10" value="5" class="slider">
+                    <span class="slider-value" id="food-value">5</span>
+                </div>
+            </div>
+            
+            <div class="slider-group">
+                <label for="exercise">Exercise</label>
+                <div class="slider-container">
+                    <input type="range" id="exercise" name="exercise" min="0" max="10" value="5" class="slider">
+                    <span class="slider-value" id="exercise-value">5</span>
+                </div>
+            </div>
+            
+            <div class="slider-group">
+                <label for="feeling">How I Felt Yesterday</label>
+                <div class="slider-container">
+                    <input type="range" id="feeling" name="feeling" min="0" max="10" value="5" class="slider">
+                    <span class="slider-value" id="feeling-value">5</span>
+                </div>
+            </div>
+            
+            <button type="submit" class="submit-btn">Save Entry</button>
+        </form>
+        
+        <div id="message" class="message"></div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
+
