@@ -56,7 +56,10 @@ document.addEventListener('DOMContentLoaded', function() {
 async function saveEntry() {
     const currentUser = sessionStorage.getItem('currentUser');
     if (!currentUser) {
-        window.location.href = 'index.html';
+        showMessage('Please login first', 'error');
+        setTimeout(() => {
+            window.location.href = 'index.html';
+        }, 1000);
         return;
     }
     
@@ -66,8 +69,17 @@ async function saveEntry() {
     const feeling = document.getElementById('feeling').value;
     const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
     
-    // Create CSV row with username
-    const csvRow = `${date},${currentUser},${sleep},${food},${exercise},${feeling}\n`;
+    // Validate that we have a username
+    if (!currentUser || currentUser.trim() === '') {
+        showMessage('User session expired. Please login again.', 'error');
+        setTimeout(() => {
+            window.location.href = 'index.html';
+        }, 1000);
+        return;
+    }
+    
+    // Create CSV row with username (ensure username is included)
+    const csvRow = `${date},${currentUser.trim()},${sleep},${food},${exercise},${feeling}\n`;
     
     // Get GitHub settings
     const githubConfig = getGitHubConfig();
@@ -183,12 +195,20 @@ async function saveToGitHub(csvRow, date, config) {
         csvContent = header + '\n' + newDataLines.join('\n') + '\n';
     }
     
-    const dataLines = csvContent.trim().split('\n').slice(1);
+    const dataLines = csvContent.trim().split('\n').slice(1).filter(line => line.trim() !== '');
     
     // Check if entry for today already exists for this user
     const existingIndex = dataLines.findIndex(line => {
         const parts = line.split(',');
-        return parts[0] === date && parts[1] === currentUser;
+        // Handle both old format (5 columns) and new format (6 columns)
+        if (parts.length === 5) {
+            // Old format without username - check by date only
+            return parts[0] === date;
+        } else if (parts.length === 6) {
+            // New format with username
+            return parts[0] === date && parts[1] === currentUser;
+        }
+        return false;
     });
     
     if (existingIndex !== -1) {
@@ -198,6 +218,13 @@ async function saveToGitHub(csvRow, date, config) {
     } else {
         // Add new row
         csvContent += csvRow;
+    }
+    
+    // Validate the CSV row has correct number of columns
+    const rowParts = csvRow.trim().split(',');
+    if (rowParts.length !== 6) {
+        console.error('CSV row has incorrect number of columns:', rowParts.length, 'Expected 6');
+        throw new Error('Failed to create valid CSV row. Please try again.');
     }
     
     // Encode content to base64
