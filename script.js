@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const currentUser = sessionStorage.getItem('currentUser');
     if (!currentUser) {
         // Redirect to login page
-        window.location.href = 'login.html';
+        window.location.href = 'index.html';
         return;
     }
     
@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
     logoutBtn.style.display = 'inline-block';
     logoutBtn.addEventListener('click', function() {
         sessionStorage.removeItem('currentUser');
-        window.location.href = 'login.html';
+        window.location.href = 'index.html';
     });
     
     const sliders = document.querySelectorAll('.slider');
@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', function() {
 async function saveEntry() {
     const currentUser = sessionStorage.getItem('currentUser');
     if (!currentUser) {
-        window.location.href = 'login.html';
+        window.location.href = 'index.html';
         return;
     }
     

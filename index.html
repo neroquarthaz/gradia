@@ -3,82 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gradia - Daily Routine Tracker</title>
+    <title>Gradia - Login</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
+    <div class="container login-container">
         <header>
             <h1>Gradia</h1>
             <p class="subtitle">Daily Routine Tracker</p>
-            <div class="user-info">
-                <span id="currentUserDisplay"></span>
-                <button id="logoutBtn" class="logout-btn" style="display: none;">Logout</button>
-            </div>
         </header>
         
-        <form id="trackerForm">
-            <div class="slider-group">
-                <label for="sleep">Sleep Quality</label>
-                <div class="slider-container">
-                    <input type="range" id="sleep" name="sleep" min="0" max="10" value="5" class="slider">
-                    <span class="slider-value" id="sleep-value">5</span>
-                </div>
+        <div class="auth-tabs">
+            <button class="tab-btn active" id="loginTab">Login</button>
+            <button class="tab-btn" id="signupTab">Sign Up</button>
+        </div>
+        
+        <!-- Login Form -->
+        <form id="loginForm" class="auth-form">
+            <div class="input-group">
+                <label for="loginUsername">Username:</label>
+                <input type="text" id="loginUsername" placeholder="Enter your username" required>
             </div>
-            
-            <div class="slider-group">
-                <label for="food">Food Quality</label>
-                <div class="slider-container">
-                    <input type="range" id="food" name="food" min="0" max="10" value="5" class="slider">
-                    <span class="slider-value" id="food-value">5</span>
-                </div>
+            <div class="input-group">
+                <label for="loginPassword">Password:</label>
+                <input type="password" id="loginPassword" placeholder="Enter your password" required>
             </div>
-            
-            <div class="slider-group">
-                <label for="exercise">Exercise</label>
-                <div class="slider-container">
-                    <input type="range" id="exercise" name="exercise" min="0" max="10" value="5" class="slider">
-                    <span class="slider-value" id="exercise-value">5</span>
-                </div>
+            <button type="submit" class="submit-btn">Login</button>
+        </form>
+        
+        <!-- Sign Up Form -->
+        <form id="signupForm" class="auth-form" style="display: none;">
+            <div class="input-group">
+                <label for="signupUsername">Username:</label>
+                <input type="text" id="signupUsername" placeholder="Choose a username" required>
             </div>
-            
-            <div class="slider-group">
-                <label for="feeling">How I Felt Yesterday</label>
-                <div class="slider-container">
-                    <input type="range" id="feeling" name="feeling" min="0" max="10" value="5" class="slider">
-                    <span class="slider-value" id="feeling-value">5</span>
-                </div>
+            <div class="input-group">
+                <label for="signupPassword">Password:</label>
+                <input type="password" id="signupPassword" placeholder="Choose a password" required>
             </div>
-            
-            <button type="submit" class="submit-btn">Save Entry</button>
+            <div class="input-group">
+                <label for="confirmPassword">Confirm Password:</label>
+                <input type="password" id="confirmPassword" placeholder="Confirm your password" required>
+            </div>
+            <button type="submit" class="submit-btn">Sign Up</button>
         </form>
         
         <div id="message" class="message"></div>
-        
-        <div class="settings-section">
-            <button id="settingsBtn" class="settings-btn">⚙️ Settings</button>
-            <div id="settingsPanel" class="settings-panel" style="display: none;">
-                <h3>GitHub Configuration</h3>
-                <p class="settings-note">Enter your GitHub details to save data directly to your repository</p>
-                <div class="input-group">
-                    <label for="githubUsername">GitHub Username:</label>
-                    <input type="text" id="githubUsername" placeholder="your-username">
-                </div>
-                <div class="input-group">
-                    <label for="githubRepo">Repository Name:</label>
-                    <input type="text" id="githubRepo" placeholder="betproject">
-                </div>
-                <div class="input-group">
-                    <label for="githubToken">Personal Access Token:</label>
-                    <input type="password" id="githubToken" placeholder="ghp_xxxxxxxxxxxx">
-                    <small class="help-text">Create one at: <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a> (needs 'repo' scope)</small>
-                </div>
-                <button id="saveSettingsBtn" class="save-settings-btn">Save Settings</button>
-            </div>
-        </div>
     </div>
     
-    <script src="script.js"></script>
+    <script src="auth.js"></script>
 </body>
 </html>
 

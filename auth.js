@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Store current user
                 sessionStorage.setItem('currentUser', username);
                 // Redirect to main page
-                window.location.href = 'index.html';
+                window.location.href = 'tracker.html';
             } else {
                 showMessage('Invalid username or password', 'error');
             }
